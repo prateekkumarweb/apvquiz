@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"fmt"
 	"net/http"
 	"encoding/json"
 )
@@ -17,6 +18,7 @@ type Data struct {
 func login(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+	fmt.Println(username+":"+password)
 	w.Header().Set("Content-Type", "application/json")
 	if (username == "prateek" && password == "pass") {
 		data := Data{true}
