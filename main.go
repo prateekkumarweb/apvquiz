@@ -16,11 +16,23 @@ type Data struct {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	username := r.FormValue("username")
-	password := r.FormValue("password")
-	fmt.Println(username+":"+password)
-	w.Header().Set("Content-Type", "application/json")
-	if (username == "prateek" && password == "pass") {
+	fmt.Println("")
+	fmt.Println("Login .....")
+	fmt.Println("Method : ", r.Method)
+	fmt.Println("Content-Type : ", r.Header.Get("Content-Type"))
+	ctype := r.Header.Get("Content-Type")
+	var username string
+	var password string
+	if (ctype == "application/x-www-form-urlencoded") {
+		// r.ParseForm()
+		username = r.FormValue("username")
+		password = r.FormValue("password")
+	} else {
+		fmt.Println("Cannot do")
+	}
+    fmt.Println(username+":"+password)
+    w.Header().Set("Content-Type", "application/json")
+    if (username == "prateek" && password == "pass") {
 		data := Data{true}
 		js, _ := json.Marshal(data)
 		w.Write(js)
@@ -29,7 +41,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		js, _ := json.Marshal(data)
 		w.Write(js)
 	}
-	// io.WriteString(w, "username : " + username + "\npassword : " + password + "\n")
+	fmt.Println("..... close")
 }
 
 func main() {
