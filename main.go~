@@ -100,7 +100,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	db, _ := sql.Open("mysql", "root:123@/apvquiz")
+	db, _ := sql.Open("mysql", "root:passw0rd@/apvquiz")
 	database = db
 	fmt.Println(db)
 	fmt.Println(database.Ping())
