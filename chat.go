@@ -1,19 +1,19 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
-	"bufio"
-	"io"
-	"fmt"
 	"strings"
 )
 
 type Client struct {
-	conn net.Conn
+	conn     net.Conn
 	nickname string
-	ch chan string
+	ch       chan string
 }
 
 func main() {
@@ -43,9 +43,9 @@ func handleConnection(c net.Conn, msgchan chan<- string, addchan chan<- Client, 
 	bufc := bufio.NewReader(c)
 	defer c.Close()
 	client := Client{
-		conn: c,
+		conn:     c,
 		nickname: promptNick(c, bufc),
-		ch: make(chan string),
+		ch:       make(chan string),
 	}
 	if strings.TrimSpace(client.nickname) == "" {
 		io.WriteString(c, "Invalid Username\n")
@@ -69,7 +69,7 @@ func handleMessages(msgchan <-chan string, addchan <-chan Client, rmchan <-chan 
 	clients := make(map[net.Conn]chan<- string)
 	for {
 		select {
-		case msg:= <-msgchan:
+		case msg := <-msgchan:
 			log.Printf("New message: %s", msg)
 			for _, ch := range clients {
 				go func(mch chan<- string) {
