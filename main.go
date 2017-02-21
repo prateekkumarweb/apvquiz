@@ -9,6 +9,7 @@ import (
 	"log"
 	"encoding/json"
 	"database/sql"
+	"strings"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -106,23 +107,16 @@ type Player struct {
 	username string
 	password string
 	ch chan string
+	otherPlayer *Player
 }
 
 var players []Player
 
-//var waiting Player
+var waiting *Player
 
 type Game struct {
 	player1 Player
 	player2 Player
-}
-
-func askCredentials(c net.Conn, bufc *bufio.Reader) (string, string) {
-	user, _, _ := bufc.ReadLine()
-	username := string(user)
-	pass, _, _ := bufc.ReadLine()
-	password := string(pass)
-	return username, password
 }
 
 func validateUser(player Player) bool {
@@ -152,13 +146,48 @@ func validateUser(player Player) bool {
 func handleClient(c net.Conn) {
 	bufc := bufio.NewReader(c)
 	defer c.Close()
-	username, password := askCredentials(c, bufc)
-	player := Player{c, username, password, make(chan string)}
+	user, _, _ := bufc.ReadLine()
+	username := string(user)
+	pass, _, _ := bufc.ReadLine()
+	password := string(pass)
+	player := Player{c, username, password, make(chan string), nil}
 	if !validateUser(player) {
 		io.WriteString(player.conn, "Invalid\n")
 		return
 	}
 	io.WriteString(player.conn, "Valid\n")
+	// TODO waiting lock
+	if waiting == nil {
+		waiting = &player
+		<-player.ch
+	} else {
+		player.otherPlayer = waiting
+		waiting = nil
+		player.otherPlayer.otherPlayer = &player
+		player.otherPlayer.ch <- "Play\n"
+	}
+	io.WriteString(player.conn, fmt.Sprintf("%s\n", player.otherPlayer.username))
+	for i:=0; i<5; i++ {
+		io.WriteString(player.conn, "Question1\n")
+		io.WriteString(player.conn, "Opt1\n")
+		io.WriteString(player.conn, "Opt2\n")
+		io.WriteString(player.conn, "Opt3\n")
+		io.WriteString(player.conn, "Opt4\n")
+		answer, _, _ := bufc.ReadLine()
+		answerStr := string(answer)
+		fmt.Println(answerStr)
+		//TODO 
+		io.WriteString(player.conn, "1\n")
+		a := strings.Compare(player.username, player.otherPlayer.username)
+		if a == 1 {
+			<-player.ch
+			player.otherPlayer.ch <- "Done\n"
+		} else {
+			player.otherPlayer.ch <- "Done\n"
+			<-player.ch
+		}
+	}
+	io.WriteString(player.conn, "25")
 }
 
 func main() {
