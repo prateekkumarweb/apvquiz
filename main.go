@@ -2,8 +2,11 @@ package main
 
 import (
 	"io"
+	"bufio"
 	"fmt"
 	"net/http"
+	"net"
+	"log"
 	"encoding/json"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
@@ -96,21 +99,35 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("..... close")
 }
 
+
+
 type Player struct {
-	id int
+	conn net.Conn
 	username string
+	password string
+	ch chan string
 }
 
 var players []Player
 
-type Reply struct {
-	Status bool
+//var waiting Player
+
+type Game struct {
+	player1 Player
+	player2 Player
 }
 
-func play(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.URL.Path)
-	username := r.FormValue("username")
-	password := r.FormValue("password")
+func askCredentials(c net.Conn, bufc *bufio.Reader) (string, string) {
+	user, _, _ := bufc.ReadLine()
+	username := string(user)
+	pass, _, _ := bufc.ReadLine()
+	password := string(pass)
+	return username, password
+}
+
+func validateUser(player Player) bool {
+	username := player.username
+	password := player.password
 	rows, err := database.Query("SELECT * FROM users WHERE username=\""+username+"\" AND password=\""+password+"\"")
     defer rows.Close()
     if err == nil {
@@ -123,35 +140,56 @@ func play(w http.ResponseWriter, r *http.Request) {
     		rows.Scan(&id, &uname, &pword)
     	}
 		if done {
-    		data := Data{true}
-			js, _ := json.Marshal(data)
-			w.Write(js)
+    		return true
 		} else {
-			data := Data{false}
-			js, _ := json.Marshal(data)
-			w.Write(js)
+			return false
 		}
 	} else {
-		data := Data{false}
-		js, _ := json.Marshal(data)
-		w.Write(js)
-	}
-    if len(players) == 0 {
-		players = append(players, Player{})
+		return false
 	}
 }
 
+func handleClient(c net.Conn) {
+	bufc := bufio.NewReader(c)
+	defer c.Close()
+	username, password := askCredentials(c, bufc)
+	player := Player{c, username, password, make(chan string)}
+	if !validateUser(player) {
+		io.WriteString(player.conn, "Invalid\n")
+		return
+	}
+	io.WriteString(player.conn, "Valid\n")
+}
+
 func main() {
-	players = make([]Player, 5)
+	players = make([]Player, 0)
 	database, _ = sql.Open("mysql", "root:123@/apvquiz")
 	err := database.Ping()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	http.HandleFunc("/", hello)
-	http.HandleFunc("/login", login)
-	http.HandleFunc("/signup", signup)
-	http.HandleFunc("/play/", play)
-	http.ListenAndServe(":8000", nil)
+
+	go func() {
+		http.HandleFunc("/", hello)
+		http.HandleFunc("/login", login)
+		http.HandleFunc("/signup", signup)
+		//http.HandleFunc("/play/", play)
+		http.ListenAndServe(":8000", nil)
+	}()
+
+	ln, err := net.Listen("tcp", ":6000")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	for {
+		conn, err := ln.Accept()
+		if (err != nil) {
+			log.Println(err)
+			continue
+		}
+		go handleClient(conn)
+	}
 }
