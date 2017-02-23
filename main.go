@@ -110,6 +110,7 @@ type Player struct {
 	password    string
 	ch          chan string
 	otherPlayer []*Player
+	score       int
 }
 
 var players []Player
@@ -163,7 +164,7 @@ func (ps Players) Swap(i, j int) {
 func handleClient(c *websocket.Conn) {
 	msgType, username, _ := c.ReadMessage()
 	msgType, password, _ := c.ReadMessage()
-	player := Player{c, string(username), string(password), make(chan string), nil}
+	player := Player{c, string(username), string(password), make(chan string), nil, 0}
 	if !validateUser(player) {
 		player.conn.WriteMessage(msgType, []byte("Invalid\n"))
 		return
@@ -190,21 +191,13 @@ func handleClient(c *websocket.Conn) {
 
 	}
 
-	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s\n", player.otherPlayer[0].username)))
-	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s\n", player.otherPlayer[1].username)))
-
 	for i := 0; i < 5; i++ {
-		player.conn.WriteMessage(msgType, []byte("Question1\n"))
-		player.conn.WriteMessage(msgType, []byte("Option1\n"))
-		player.conn.WriteMessage(msgType, []byte("Option2\n"))
-		player.conn.WriteMessage(msgType, []byte("Option3\n"))
-		player.conn.WriteMessage(msgType, []byte("Option4\n"))
-		
+		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s$#$%s$#$%s$#$%s$#$%s$#$%v$#$%v$#$%s$#$%v$#$%s$#$%v", "Question1", "Option1", "Option2", "Option3", "Option4", 1, player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
+
 		_, answer, _ := player.conn.ReadMessage()
 		answerStr := string(answer)
 		fmt.Println(answerStr)
 		//TODO
-		player.conn.WriteMessage(msgType, []byte("1\n"))
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
 		for i, p := range players {
@@ -220,7 +213,8 @@ func handleClient(c *websocket.Conn) {
 			}
 		}
 	}
-	player.conn.WriteMessage(msgType, []byte("25\n"))
+
+	player.conn.WriteMessage(msgType, []byte("25"))
 }
 
 func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
@@ -251,13 +245,14 @@ func main() {
 
 	func() {
 		upgrader := websocket.Upgrader{
-			ReadBufferSize: 1024,
+			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool { return true },
 		}
 		http.HandleFunc("/", hello)
 		http.HandleFunc("/login", login)
 		http.HandleFunc("/signup", signup)
-		http.HandleFunc("/play", func (w http.ResponseWriter, r *http.Request){
+		http.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
 			play(w, r, upgrader)
 		})
 		http.ListenAndServe(":8000", nil)
