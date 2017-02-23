@@ -1,17 +1,20 @@
 package main
 
 import (
-	"bufio"
+	//"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
-	"log"
-	"net"
+	//"log"
+	//"net"
 	"net/http"
-	"strings"
 	"sort"
+	"strings"
+	"sync"
+	//"math/rand"
+	"github.com/gorilla/websocket"
 )
 
 var database *sql.DB
@@ -102,7 +105,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 }
 
 type Player struct {
-	conn        net.Conn
+	conn        *websocket.Conn
 	username    string
 	password    string
 	ch          chan string
@@ -112,6 +115,7 @@ type Player struct {
 var players []Player
 
 var waiting []*Player
+var waitingMutex sync.Mutex
 
 func validateUser(player Player) bool {
 	username := player.username
@@ -156,51 +160,54 @@ func (ps Players) Swap(i, j int) {
 	ps[i], ps[j] = ps[j], ps[i]
 }
 
-func handleClient(c net.Conn) {
-	bufc := bufio.NewReader(c)
-	defer c.Close()
-	user, _, _ := bufc.ReadLine()
-	username := string(user)
-	pass, _, _ := bufc.ReadLine()
-	password := string(pass)
-	player := Player{c, username, password, make(chan string), nil}
+func handleClient(c *websocket.Conn) {
+	msgType, username, _ := c.ReadMessage()
+	msgType, password, _ := c.ReadMessage()
+	player := Player{c, string(username), string(password), make(chan string), nil}
 	if !validateUser(player) {
-		io.WriteString(player.conn, "Invalid\n")
+		player.conn.WriteMessage(msgType, []byte("Invalid\n"))
 		return
 	}
-	io.WriteString(player.conn, "Valid\n")
-	// TODO waiting lock
-	//Start lock
+	player.conn.WriteMessage(msgType, []byte("Valid\n"))
+
+	waitingMutex.Lock()
 	if len(waiting) < 2 {
 		waiting = append(waiting, &player)
+		waitingMutex.Unlock()
 		<-player.ch
 	} else {
 		player.otherPlayer = waiting
 		waiting = nil
+		waitingMutex.Unlock()
 		player.otherPlayer[0].otherPlayer = []*Player{player.otherPlayer[1], &player}
 		player.otherPlayer[1].otherPlayer = []*Player{player.otherPlayer[0], &player}
 		player.otherPlayer[0].ch <- "Play\n"
 		player.otherPlayer[1].ch <- "Play\n"
+		// r := rand.New(rand.NewSource(99))
+		// rows, _ := database.Query("SELECT COUNT(*) FROM questions")
+		// fmt.Println(rows)
+		// rows.Close()
+
 	}
-	//End lock
-	io.WriteString(player.conn, fmt.Sprintf("%s\n", player.otherPlayer[0].username))
-	io.WriteString(player.conn, fmt.Sprintf("%s\n", player.otherPlayer[1].username))
-	
+
+	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s\n", player.otherPlayer[0].username)))
+	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s\n", player.otherPlayer[1].username)))
+
 	for i := 0; i < 5; i++ {
-		io.WriteString(player.conn, "Question1\n")
-		io.WriteString(player.conn, "Opt1\n")
-		io.WriteString(player.conn, "Opt2\n")
-		io.WriteString(player.conn, "Opt3\n")
-		io.WriteString(player.conn, "Opt4\n")
-		answer, _, _ := bufc.ReadLine()
+		player.conn.WriteMessage(msgType, []byte("Question1\n"))
+		player.conn.WriteMessage(msgType, []byte("Option1\n"))
+		player.conn.WriteMessage(msgType, []byte("Option2\n"))
+		player.conn.WriteMessage(msgType, []byte("Option3\n"))
+		player.conn.WriteMessage(msgType, []byte("Option4\n"))
+		
+		_, answer, _ := player.conn.ReadMessage()
 		answerStr := string(answer)
 		fmt.Println(answerStr)
 		//TODO
-		io.WriteString(player.conn, "1\n")
+		player.conn.WriteMessage(msgType, []byte("1\n"))
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
 		for i, p := range players {
-			
 			if p == &player {
 				if i != 2 {
 					<-player.ch
@@ -213,8 +220,24 @@ func handleClient(c net.Conn) {
 			}
 		}
 	}
-	io.WriteString(player.conn, "25\n")
+	player.conn.WriteMessage(msgType, []byte("25\n"))
 }
+
+func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Client connected...")
+	go handleClient(conn)
+}
+
+// func handleClientWS(conn *websocket.Conn) {
+// 	msgType, msg, _ := conn.ReadMessage()
+// 	conn.WriteMessage(msgType, []byte("Hello\n"))
+// 	fmt.Println(msg)
+// }
 
 func main() {
 	//players = make([]Player, 0)
@@ -226,26 +249,32 @@ func main() {
 		return
 	}
 
-	go func() {
+	func() {
+		upgrader := websocket.Upgrader{
+			ReadBufferSize: 1024,
+			WriteBufferSize: 1024,
+		}
 		http.HandleFunc("/", hello)
 		http.HandleFunc("/login", login)
 		http.HandleFunc("/signup", signup)
-		//http.HandleFunc("/play/", play)
+		http.HandleFunc("/play", func (w http.ResponseWriter, r *http.Request){
+			play(w, r, upgrader)
+		})
 		http.ListenAndServe(":8000", nil)
 	}()
 
-	ln, err := net.Listen("tcp", ":6000")
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
+	// ln, err := net.Listen("tcp", ":6000")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// 	return
+	// }
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		go handleClient(conn)
-	}
+	// for {
+	// 	conn, err := ln.Accept()
+	// 	if err != nil {
+	// 		log.Println(err)
+	// 		continue
+	// 	}
+	// 	go handleClient(conn)
+	// }
 }
