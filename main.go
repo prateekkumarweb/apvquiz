@@ -13,8 +13,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	//"math/rand"
+	"math/rand"
 	"github.com/gorilla/websocket"
+	"time"
 )
 
 var database *sql.DB
@@ -115,7 +116,7 @@ type Player struct {
 
 var players []Player
 
-var waiting []*Player
+var waiting map[string][]*Player
 var waitingMutex sync.Mutex
 
 func validateUser(player Player) bool {
@@ -170,29 +171,53 @@ func handleClient(c *websocket.Conn) {
 		return
 	}
 	player.conn.WriteMessage(msgType, []byte("Valid\n"))*/
+	var questions [5]string
+	msgType, t, _ := c.ReadMessage()
+	topic := string(t)
+	fmt.Println(topic)
 
 	waitingMutex.Lock()
-	if len(waiting) < 2 {
-		waiting = append(waiting, &player)
+	if len(waiting[topic]) < 2 {
+		if waiting[topic] == nil {
+			waiting[topic] = make([]*Player, 0)
+		}
+		waiting[topic] = append(waiting[topic], &player)
 		waitingMutex.Unlock()
 		<-player.ch
+		for i, _ := range questions {
+			questions[i] = <-player.ch
+		}
 	} else {
-		player.otherPlayer = waiting
-		waiting = nil
+		player.otherPlayer = waiting[topic]
+		waiting[topic] = nil
 		waitingMutex.Unlock()
 		player.otherPlayer[0].otherPlayer = []*Player{player.otherPlayer[1], &player}
 		player.otherPlayer[1].otherPlayer = []*Player{player.otherPlayer[0], &player}
 		player.otherPlayer[0].ch <- "Play\n"
 		player.otherPlayer[1].ch <- "Play\n"
-		// r := rand.New(rand.NewSource(99))
-		// rows, _ := database.Query("SELECT COUNT(*) FROM questions")
-		// fmt.Println(rows)
-		// rows.Close()
-
+		r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+		rows, _ := database.Query("SELECT COUNT(*) FROM "+topic)
+		var count int
+		for rows.Next() {
+			rows.Scan(&count)
+		}
+		perm := r.Perm(count)
+		fmt.Println(perm)
+		for i, _ := range questions {
+			rows, _ := database.Query(fmt.Sprintf("SELECT * FROM %s WHERE id=%v", topic,perm[i]+1))
+			var id, answer int
+			var question, option1, option2, option3, option4 string
+			for rows.Next() {
+				rows.Scan(&id, &question, &option1, &option2, &option3, &option4, &answer)
+			}
+			questions[i] = fmt.Sprintf("%s@#@%s@#@%s@#@%s@#@%s@#@%v", question, option1, option2, option3, option4, answer)
+			player.otherPlayer[0].ch <- questions[i]
+			player.otherPlayer[1].ch <- questions[i]
+		}
 	}
 
-	for i := 0; i < 5; i++ {
-		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%s@#@%s@#@%s@#@%s@#@%v@#@%v@#@%s@#@%v@#@%s@#@%v", "Question1", "Option1", "Option2", "Option3", "Option4", 1, player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
+	for i, _ := range questions {
+		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
 
 		_, answer, _ := player.conn.ReadMessage()
 		answerStr := string(answer)
@@ -234,6 +259,7 @@ func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
 // }
 
 func main() {
+	waiting = make(map[string][]*Player)
 	//players = make([]Player, 0)
 	database, _ = sql.Open("mysql", "root:123@/apvquiz")
 	//Open question table
