@@ -165,11 +165,11 @@ func handleClient(c *websocket.Conn) {
 	msgType, username, _ := c.ReadMessage()
 	msgType, password, _ := c.ReadMessage()
 	player := Player{c, string(username), string(password), make(chan string), nil, 0}
-	if !validateUser(player) {
+	/*if !validateUser(player) {
 		player.conn.WriteMessage(msgType, []byte("Invalid\n"))
 		return
 	}
-	player.conn.WriteMessage(msgType, []byte("Valid\n"))
+	player.conn.WriteMessage(msgType, []byte("Valid\n"))*/
 
 	waitingMutex.Lock()
 	if len(waiting) < 2 {
@@ -192,11 +192,11 @@ func handleClient(c *websocket.Conn) {
 	}
 
 	for i := 0; i < 5; i++ {
-		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s$#$%s$#$%s$#$%s$#$%s$#$%v$#$%v$#$%s$#$%v$#$%s$#$%v", "Question1", "Option1", "Option2", "Option3", "Option4", 1, player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
+		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%s@#@%s@#@%s@#@%s@#@%v@#@%v@#@%s@#@%v@#@%s@#@%v", "Question1", "Option1", "Option2", "Option3", "Option4", 1, player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
 
 		_, answer, _ := player.conn.ReadMessage()
 		answerStr := string(answer)
-		fmt.Println(answerStr)
+		fmt.Println(answerStr+player.username)
 		//TODO
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
