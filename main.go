@@ -278,16 +278,41 @@ func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
 	go handleClient(conn)
 }
 
+func initialize() {
+	r := rand.New(rand.NewSource(99))
+	topics := []string{"harrypotter", "gk", "movies", "anime", "science", "cricket", "got", "trivia"}
+	for _, t := range topics {
+		go func(topic string) {
+			rows, _ := database.Query("CREATE TABLE IF NOT EXISTS " + topic + " (id int auto_increment, question text not null, option1 varchar(180) not null, option2 varchar(180) not null, option3 varchar(180) not null, option4 varchar(180) not null, answer int not null, primary key (id))")
+			rows.Close()
+			rows, _ = database.Query("SELECT COUNT(*) FROM "+topic)
+			var count int
+			for rows.Next() {
+				rows.Scan(&count)
+			}
+			rows.Close()
+			if count < 25 {
+				for i := 0; i<25; i++ {
+					rows, err := database.Query(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %v)", topic, "question"+fmt.Sprintf("%v", i), "option"+fmt.Sprintf("%v", i)+"-1", "option"+fmt.Sprintf("%v", i)+"-2", "option"+fmt.Sprintf("%v", i)+"-3", "option"+fmt.Sprintf("%v", i)+"-4", r.Intn(4)+1))
+					if err != nil {
+						fmt.Println(err)
+					}
+					rows.Close()
+				}
+			}
+		}(t)
+	}
+}
+
 func main() {
 	waiting = make(map[string][]*Player)
-	//players = make([]Player, 0)
 	database, _ = sql.Open("mysql", "root:123@/apvquiz")
-	//Open question table
 	err := database.Ping()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	go initialize()
 
 	func() {
 		upgrader := websocket.Upgrader{
