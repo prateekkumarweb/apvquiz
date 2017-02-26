@@ -1,14 +1,11 @@
 package main
 
 import (
-	//"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
-	//"log"
-	//"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -17,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"time"
 	"strconv"
+	"regexp"
 )
 
 var database *sql.DB
@@ -86,24 +84,35 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Println(username + ":" + password)
-	if username != "" && password != "" {
-		res, err := database.Exec("INSERT INTO users (username, password) VALUES (\"" + username + "\", \"" + password + "\")")
-		fmt.Println(res)
-		if err == nil {
-			data := Result{true, "Successful"}
-			js, _ := json.Marshal(data)
-			w.Write(js)
-		} else {
-			data := Result{false, "Use another username"}
-			js, _ := json.Marshal(data)
-			w.Write(js)
-		}
-	} else {
+	if !regexp.MustCompile(`[\dA-Za-z]`).MatchString(username) {
+		data := Result{false, "Username should contain only alphanumeric characters"}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+		return
+	}
+	if len(username) < 4 {
+		data := Result{false, "Username should atleast 4 characters"}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+		return
+	}
+	if username == "" || password == "" {
 		data := Result{false, "Username or password cannot be empty"}
 		js, _ := json.Marshal(data)
 		w.Write(js)
+		return
 	}
-	fmt.Println("..... close")
+	res, err := database.Exec("INSERT INTO users (username, password) VALUES (\"" + username + "\", \"" + password + "\")")
+	fmt.Println(res)
+	if err == nil {
+		data := Result{true, "Successful"}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+	} else {
+		data := Result{false, "Use another username"}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+	}
 }
 
 type Player struct {
@@ -229,7 +238,7 @@ func handleClient(c *websocket.Conn) {
 			player.score  += score
 		} else if answerStr == "1" && i == 4{
 			score, _ := strconv.Atoi(timeStr)
-			player.score  += score*2	
+			player.score  += score*2
 		}
 		//fmt.Println(answerStr+player.username)
 		//TODO
@@ -263,12 +272,6 @@ func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
 	go handleClient(conn)
 }
 
-// func handleClientWS(conn *websocket.Conn) {
-// 	msgType, msg, _ := conn.ReadMessage()
-// 	conn.WriteMessage(msgType, []byte("Hello\n"))
-// 	fmt.Println(msg)
-// }
-
 func main() {
 	waiting = make(map[string][]*Player)
 	//players = make([]Player, 0)
@@ -294,19 +297,4 @@ func main() {
 		})
 		http.ListenAndServe(":8000", nil)
 	}()
-
-	// ln, err := net.Listen("tcp", ":6000")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// 	return
-	// }
-
-	// for {
-	// 	conn, err := ln.Accept()
-	// 	if err != nil {
-	// 		log.Println(err)
-	// 		continue
-	// 	}
-	// 	go handleClient(conn)
-	// }
 }
