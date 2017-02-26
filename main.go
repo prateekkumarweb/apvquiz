@@ -33,14 +33,9 @@ type Result struct {
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("")
-	fmt.Println("Login .....")
-	fmt.Println("Method : ", r.Method)
-	fmt.Println("Content-Type : ", r.Header.Get("Content-Type"))
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Println(username + ":" + password)
 	if username != "" && password != "" {
 		rows, err := database.Query("SELECT * FROM users WHERE username=\"" + username + "\" AND password=\"" + password + "\"")
 		defer rows.Close()
@@ -76,14 +71,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("")
-	fmt.Println("Login .....")
-	fmt.Println("Method : ", r.Method)
-	fmt.Println("Content-Type : ", r.Header.Get("Content-Type"))
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Println(username + ":" + password)
 	if !regexp.MustCompile(`[\dA-Za-z]`).MatchString(username) {
 		data := Result{false, "Username should contain only alphanumeric characters"}
 		js, _ := json.Marshal(data)
@@ -113,6 +103,22 @@ func signup(w http.ResponseWriter, r *http.Request) {
 		js, _ := json.Marshal(data)
 		w.Write(js)
 	}
+}
+
+type PlayerDetails struct {
+	Status bool
+	Games int
+	Contri int
+}
+
+func playerDetails(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+	fmt.Println(username+password)
+	w.Header().Set("Content-Type", "application/json")
+	data := PlayerDetails{true, 5, 10}
+	js, _ := json.Marshal(data)
+	w.Write(js)
 }
 
 type Player struct {
@@ -292,6 +298,7 @@ func main() {
 		http.HandleFunc("/", hello)
 		http.HandleFunc("/login", login)
 		http.HandleFunc("/signup", signup)
+		http.HandleFunc("/details", playerDetails)
 		http.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
 			play(w, r, upgrader)
 		})
