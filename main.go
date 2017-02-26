@@ -175,7 +175,6 @@ func handleClient(c *websocket.Conn) {
 	var questions [5]string
 	msgType, t, _ := c.ReadMessage()
 	topic := string(t)
-	topic := "questions"
 	fmt.Println(topic)
 
 	waitingMutex.Lock()
@@ -222,13 +221,15 @@ func handleClient(c *websocket.Conn) {
 		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
 
 		_, answer, _ := player.conn.ReadMessage()
-		_, time, _ := player.conn.ReadMessage()
+		_, timer, _ := player.conn.ReadMessage()
 		answerStr := string(answer)
-		timeStr := string(time)
-		if answer == "1" && i != 4 {
-			player.score  += strconv.Atoi(time)
-		} else if answer == "1" && i == 4{
-			player.score  += strconv.Atoi(time)*1.5
+		timeStr := string(timer)
+		if answerStr == "1" && i != 4 {
+			score, _ := strconv.Atoi(timeStr)
+			player.score  += score
+		} else if answerStr == "1" && i == 4{
+			score, _ := strconv.Atoi(timeStr)
+			player.score  += score*2	
 		}
 		//fmt.Println(answerStr+player.username)
 		//TODO
