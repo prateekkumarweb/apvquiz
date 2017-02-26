@@ -108,15 +108,27 @@ func signup(w http.ResponseWriter, r *http.Request) {
 type PlayerDetails struct {
 	Status bool
 	Games int
+	Points int
 	Contri int
 }
 
 func playerDetails(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
-	fmt.Println(username+password)
 	w.Header().Set("Content-Type", "application/json")
-	data := PlayerDetails{true, 5, 10}
+	rows, err := database.Query(fmt.Sprintf("SELECT * FROM users where username='%s' AND password='%s'", username, password))
+	defer rows.Close()
+	if err != nil {
+		data := PlayerDetails{false, 0, 0, 0}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+		return
+	}
+	var id, points, games, contributions int
+	for rows.Next() {
+		rows.Scan(&id, &username, &password, &points, &games, &contributions)
+	}
+	data := PlayerDetails{true, games, points, contributions}
 	js, _ := json.Marshal(data)
 	w.Write(js)
 }
@@ -246,8 +258,6 @@ func handleClient(c *websocket.Conn) {
 			score, _ := strconv.Atoi(timeStr)
 			player.score  += score*2
 		}
-		//fmt.Println(answerStr+player.username)
-		//TODO
 		time.Sleep(3 * time.Second)
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
@@ -266,6 +276,21 @@ func handleClient(c *websocket.Conn) {
 	}
 
 	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%v@#@%s@#@%v@#@%s@#@%v", player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
+	rows, err := database.Query("SELECT * FROM users WHERE username='"+player.username+"' AND password='"+player.password+"'")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	var id, points, games, contributions int
+	for rows.Next() {
+		rows.Scan(&id, &username, &password, &points, &games, &contributions)
+	}
+	games += 1
+	points += player.score
+	_, err = database.Query(fmt.Sprintf("UPDATE users SET games=%v, points=%v WHERE username=\"%s\" AND password=\"%s\"", games, points, username, password))
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
@@ -279,8 +304,24 @@ func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
 }
 
 func initialize() {
+	database, _ = sql.Open("mysql", "root:123@/apvquiz")
+	err := database.Ping()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	rows, _ := database.Query(`CREATE TABLE IF NOT EXISTS users (
+		id int auto_increment,
+		username varchar(180) not null unique,
+		password varchar(180) not null,
+		points int DEFAULT 0,
+		games int DEFAULT 0,
+		contributions int DEFAULT 0,
+		primary key (id)
+	)`)
+	rows.Close()
 	r := rand.New(rand.NewSource(99))
-	topics := []string{"harrypotter", "gk", "movies", "anime", "science", "cricket", "got", "trivia"}
+	topics := []string{"harrypotter", "gk", "movies", "anime", "science", "cricket", "got", "trivia", "computerscience"}
 	for _, t := range topics {
 		go func(topic string) {
 			rows, _ := database.Query("CREATE TABLE IF NOT EXISTS " + topic + " (id int auto_increment, question text not null, option1 varchar(180) not null, option2 varchar(180) not null, option3 varchar(180) not null, option4 varchar(180) not null, answer int not null, primary key (id))")
@@ -306,12 +347,7 @@ func initialize() {
 
 func main() {
 	waiting = make(map[string][]*Player)
-	database, _ = sql.Open("mysql", "root:123@/apvquiz")
-	err := database.Ping()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	
 	go initialize()
 
 	func() {
