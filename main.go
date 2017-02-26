@@ -174,6 +174,7 @@ func handleClient(c *websocket.Conn) {
 	var questions [5]string
 	msgType, t, _ := c.ReadMessage()
 	topic := string(t)
+	topic := "questions"
 	fmt.Println(topic)
 
 	waitingMutex.Lock()
@@ -239,7 +240,7 @@ func handleClient(c *websocket.Conn) {
 		}
 	}
 
-	player.conn.WriteMessage(msgType, []byte("25"))
+	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%v@#@%s@#@%v@#@%s@#@%v", player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
 }
 
 func play(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) {
