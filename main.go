@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"github.com/gorilla/websocket"
 	"time"
+	"strconv"
 )
 
 var database *sql.DB
@@ -220,9 +221,17 @@ func handleClient(c *websocket.Conn) {
 		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
 
 		_, answer, _ := player.conn.ReadMessage()
+		_, time, _ := player.conn.ReadMessage()
 		answerStr := string(answer)
-		fmt.Println(answerStr+player.username)
+		timeStr := string(time)
+		if answer == "1" && i != 4 {
+			player.score  += strconv.Atoi(time)
+		} else if answer == "1" && i == 4{
+			player.score  += strconv.Atoi(time)*1.5
+		}
+		//fmt.Println(answerStr+player.username)
 		//TODO
+		time.Sleep(3 * time.Second)
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
 		for i, p := range players {
