@@ -211,6 +211,7 @@ func handleClient(c *websocket.Conn) {
 			if err != nil || string(msg) == "closed" {
 				for _, p := range player.otherPlayer {
 					p.conn.WriteMessage(msgType, []byte("Opponent has left the game"))
+					p.conn.Close()
 				}
 				waitingMutex.Lock()
 				for i, p := range waiting[topic] {
@@ -220,6 +221,7 @@ func handleClient(c *websocket.Conn) {
 					}
 				}
 				waitingMutex.Unlock()
+				player.conn.Close()
 				return
 			}
 			msgs <- string(msg)
