@@ -5,16 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/websocket"
 	"io"
+	"math/rand"
 	"net/http"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
-	"math/rand"
-	"github.com/gorilla/websocket"
 	"time"
-	"strconv"
-	"regexp"
 )
 
 var database *sql.DB
@@ -107,7 +107,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 
 type PlayerDetails struct {
 	Status bool
-	Games int
+	Games  int
 	Points int
 	Contri int
 }
@@ -191,18 +191,40 @@ func (ps Players) Swap(i, j int) {
 }
 
 func handleClient(c *websocket.Conn) {
+
+	msgs := make(chan string)
+
 	msgType, username, _ := c.ReadMessage()
 	msgType, password, _ := c.ReadMessage()
 	player := Player{c, string(username), string(password), make(chan string), nil, 0}
-	/*if !validateUser(player) {
+	if !validateUser(player) {
 		player.conn.WriteMessage(msgType, []byte("Invalid\n"))
 		return
 	}
-	player.conn.WriteMessage(msgType, []byte("Valid\n"))*/
 	var questions [5]string
 	msgType, t, _ := c.ReadMessage()
 	topic := string(t)
-	fmt.Println(topic)
+
+	go func() {
+		for {
+			_, msg, err := c.ReadMessage()
+			if err != nil || string(msg) == "closed" {
+				for _, p := range player.otherPlayer {
+					p.conn.WriteMessage(msgType, []byte("Opponent has left the game"))
+				}
+				waitingMutex.Lock()
+				for i, p := range waiting[topic] {
+					if p == &player {
+						waiting[topic] = append(waiting[topic][:i], waiting[topic][i+1:]...)
+						break
+					}
+				}
+				waitingMutex.Unlock()
+				return
+			}
+			msgs <- string(msg)
+		}
+	}()
 
 	waitingMutex.Lock()
 	if len(waiting[topic]) < 2 {
@@ -224,41 +246,47 @@ func handleClient(c *websocket.Conn) {
 		player.otherPlayer[0].ch <- "Play\n"
 		player.otherPlayer[1].ch <- "Play\n"
 		r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-		rows, _ := database.Query("SELECT COUNT(*) FROM "+topic)
+		rows, _ := database.Query("SELECT COUNT(*) FROM " + topic)
+		defer rows.Close()
 		var count int
 		for rows.Next() {
 			rows.Scan(&count)
 		}
 		perm := r.Perm(count)
-		fmt.Println(perm)
 		for i, _ := range questions {
-			rows, _ := database.Query(fmt.Sprintf("SELECT * FROM %s WHERE id=%v", topic,perm[i]+1))
-			var id, answer int
-			var question, option1, option2, option3, option4 string
-			for rows.Next() {
-				rows.Scan(&id, &question, &option1, &option2, &option3, &option4, &answer)
-			}
-			questions[i] = fmt.Sprintf("%s@#@%s@#@%s@#@%s@#@%s@#@%v", question, option1, option2, option3, option4, answer)
-			player.otherPlayer[0].ch <- questions[i]
-			player.otherPlayer[1].ch <- questions[i]
+			func() {
+				rows, _ := database.Query(fmt.Sprintf("SELECT * FROM %s WHERE id=%v", topic, perm[i]+1))
+				defer rows.Close()
+				var id, answer int
+				var question, option1, option2, option3, option4 string
+				for rows.Next() {
+					rows.Scan(&id, &question, &option1, &option2, &option3, &option4, &answer)
+				}
+				questions[i] = fmt.Sprintf("%s@#@%s@#@%s@#@%s@#@%s@#@%v", question, option1, option2, option3, option4, answer)
+				player.otherPlayer[0].ch <- questions[i]
+				player.otherPlayer[1].ch <- questions[i]
+			}()
 		}
 	}
 
 	for i, _ := range questions {
 		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
 
-		_, answer, _ := player.conn.ReadMessage()
-		_, timer, _ := player.conn.ReadMessage()
-		answerStr := string(answer)
-		timeStr := string(timer)
+		answerStr := <-msgs
+		timeStr := <-msgs
+
+		if answerStr == "closed" || timeStr == "closed" {
+			fmt.Println("closed.......//")
+		}
+
 		if answerStr == "1" && i != 4 {
 			score, _ := strconv.Atoi(timeStr)
-			player.score  += score
-		} else if answerStr == "1" && i == 4{
+			player.score += score
+		} else if answerStr == "1" && i == 4 {
 			score, _ := strconv.Atoi(timeStr)
-			player.score  += score*2
+			player.score += score * 2
 		}
-		time.Sleep(3 * time.Second)
+		time.Sleep(2 * time.Second)
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
 		for i, p := range players {
@@ -276,7 +304,8 @@ func handleClient(c *websocket.Conn) {
 	}
 
 	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%v@#@%s@#@%v@#@%s@#@%v", player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
-	rows, err := database.Query("SELECT * FROM users WHERE username='"+player.username+"' AND password='"+player.password+"'")
+	rows, err := database.Query("SELECT * FROM users WHERE username='" + player.username + "'")
+	defer rows.Close()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -285,9 +314,11 @@ func handleClient(c *websocket.Conn) {
 	for rows.Next() {
 		rows.Scan(&id, &username, &password, &points, &games, &contributions)
 	}
+	fmt.Println(fmt.Sprintf("%s B== %v == %v", player.username, games, points))
 	games += 1
 	points += player.score
-	_, err = database.Query(fmt.Sprintf("UPDATE users SET games=%v, points=%v WHERE username=\"%s\" AND password=\"%s\"", games, points, username, password))
+	fmt.Println(fmt.Sprintf("%s A== %v == %v", player.username, games, points))
+	_, err = database.Query(fmt.Sprintf("UPDATE users SET games=%v, points=%v WHERE username=\"%s\"", games, points, username))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -326,14 +357,14 @@ func initialize() {
 		go func(topic string) {
 			rows, _ := database.Query("CREATE TABLE IF NOT EXISTS " + topic + " (id int auto_increment, question text not null, option1 varchar(180) not null, option2 varchar(180) not null, option3 varchar(180) not null, option4 varchar(180) not null, answer int not null, primary key (id))")
 			rows.Close()
-			rows, _ = database.Query("SELECT COUNT(*) FROM "+topic)
+			rows, _ = database.Query("SELECT COUNT(*) FROM " + topic)
 			var count int
 			for rows.Next() {
 				rows.Scan(&count)
 			}
 			rows.Close()
 			if count < 25 {
-				for i := 0; i<25; i++ {
+				for i := 0; i < 25; i++ {
 					rows, err := database.Query(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %v)", topic, "question"+fmt.Sprintf("%v", i), "option"+fmt.Sprintf("%v", i)+"-1", "option"+fmt.Sprintf("%v", i)+"-2", "option"+fmt.Sprintf("%v", i)+"-3", "option"+fmt.Sprintf("%v", i)+"-4", r.Intn(4)+1))
 					if err != nil {
 						fmt.Println(err)
@@ -347,14 +378,14 @@ func initialize() {
 
 func main() {
 	waiting = make(map[string][]*Player)
-	
+
 	go initialize()
 
 	func() {
 		upgrader := websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool { return true },
+			CheckOrigin:     func(r *http.Request) bool { return true },
 		}
 		http.HandleFunc("/", hello)
 		http.HandleFunc("/login", login)
