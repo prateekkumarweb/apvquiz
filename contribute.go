@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"strings"
 )
@@ -29,12 +30,23 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id, points, games, contributions int
-	err = database.QueryRow("SELECT * FROM users WHERE username=? AND password=?", username, password).Scan(&id, &username, &password, &points, &games, &contributions)
+	var dbPassword string
+	err = database.QueryRow("SELECT * FROM users WHERE username=?", username).Scan(&id, &username, &dbPassword, &points, &games, &contributions)
 	if err != nil {
 		data := struct {
 			Status  bool
 			Message string
 		}{false, "Error!"}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+		return
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(password))
+	if err != nil {
+		data := struct {
+			Status  bool
+			Message string
+		}{false, "Wrong Password!"}
 		js, _ := json.Marshal(data)
 		w.Write(js)
 		return
