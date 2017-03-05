@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
+	"golang.org/x/crypto/bcrypt"
 	"math/rand"
 	"net/http"
 	"sort"
@@ -14,6 +15,7 @@ import (
 )
 
 type Player struct {
+	sync.Mutex
 	conn        *websocket.Conn
 	username    string
 	password    string
@@ -53,33 +55,25 @@ func validatePlayer(player Player) bool {
 }
 
 func validateUser(username, password string) bool {
-	rows, err := database.Query("SELECT * FROM users WHERE username=\"" + username + "\" AND password=\"" + password + "\"")
-	defer rows.Close()
-	if err == nil {
-		var done bool
-		done = false
-		var id int
-		var uname, pword string
-		for rows.Next() {
-			done = true
-			rows.Scan(&id, &uname, &pword)
-		}
-		if done {
-			return true
-		} else {
-			return false
-		}
-	} else {
+	var dbPassword string
+	err := database.QueryRow("SELECT password FROM users WHERE username=?", username).Scan(&dbPassword)
+	if err != nil {
 		return false
 	}
+	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(password))
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func playerDetails(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	w.Header().Set("Content-Type", "application/json")
-	rows, err := database.Query(fmt.Sprintf("SELECT * FROM users where username='%s' AND password='%s'", username, password))
-	defer rows.Close()
+	var id, points, games, contributions int
+	// TODO use password here
+	err := database.QueryRow("SELECT * FROM users where username=?", username).Scan(&id, &username, &password, &points, &games, &contributions)
 	if err != nil {
 		data := struct {
 			Status bool
@@ -91,10 +85,6 @@ func playerDetails(w http.ResponseWriter, r *http.Request) {
 		w.Write(js)
 		return
 	}
-	var id, points, games, contributions int
-	for rows.Next() {
-		rows.Scan(&id, &username, &password, &points, &games, &contributions)
-	}
 	data := struct {
 		Status bool
 		Games  int
@@ -105,15 +95,21 @@ func playerDetails(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
+func (player *Player) write(msgType int, s string) {
+	player.Lock()
+	player.conn.WriteMessage(msgType, []byte(s))
+	player.Unlock()
+}
+
 func handleClient(c *websocket.Conn) {
 
 	msgs := make(chan string)
 
 	msgType, username, _ := c.ReadMessage()
 	msgType, password, _ := c.ReadMessage()
-	player := Player{c, string(username), string(password), make(chan string), nil, 0}
+	player := Player{sync.Mutex{}, c, string(username), string(password), make(chan string), nil, 0}
 	if !validatePlayer(player) {
-		player.conn.WriteMessage(msgType, []byte("Invalid\n"))
+		player.write(msgType, "Invalid\n")
 		return
 	}
 	var questions [5]string
@@ -125,7 +121,7 @@ func handleClient(c *websocket.Conn) {
 			_, msg, err := c.ReadMessage()
 			if err != nil || string(msg) == "closed" {
 				for _, p := range player.otherPlayer {
-					p.conn.WriteMessage(msgType, []byte("Opponent has left the game"))
+					p.write(msgType, "Opponent has left the game")
 					p.conn.Close()
 				}
 				waiting.Lock()
@@ -163,22 +159,14 @@ func handleClient(c *websocket.Conn) {
 		player.otherPlayer[0].ch <- "Play\n"
 		player.otherPlayer[1].ch <- "Play\n"
 		r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-		rows, _ := database.Query("SELECT COUNT(*) FROM " + topic)
-		defer rows.Close()
 		var count int
-		for rows.Next() {
-			rows.Scan(&count)
-		}
+		database.QueryRow("SELECT COUNT(*) FROM " + topic).Scan(&count)
 		perm := r.Perm(count)
 		for i, _ := range questions {
 			func() {
-				rows, _ := database.Query(fmt.Sprintf("SELECT * FROM %s WHERE id=%v", topic, perm[i]+1))
-				defer rows.Close()
 				var id, answer int
 				var question, option1, option2, option3, option4 string
-				for rows.Next() {
-					rows.Scan(&id, &question, &option1, &option2, &option3, &option4, &answer)
-				}
+				database.QueryRow(fmt.Sprintf("SELECT * FROM %s WHERE id=%v", topic, perm[i]+1)).Scan(&id, &question, &option1, &option2, &option3, &option4, &answer)
 				questions[i] = fmt.Sprintf("%s@#@%s@#@%s@#@%s@#@%s@#@%v", question, option1, option2, option3, option4, answer)
 				player.otherPlayer[0].ch <- questions[i]
 				player.otherPlayer[1].ch <- questions[i]
@@ -187,7 +175,7 @@ func handleClient(c *websocket.Conn) {
 	}
 
 	for i, _ := range questions {
-		player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
+		player.write(msgType, fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score))
 
 		answerStr := <-msgs
 		timeStr := <-msgs
@@ -220,16 +208,12 @@ func handleClient(c *websocket.Conn) {
 		}
 	}
 
-	player.conn.WriteMessage(msgType, []byte(fmt.Sprintf("%v@#@%s@#@%v@#@%s@#@%v", player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score)))
-	rows, err := database.Query("SELECT * FROM users WHERE username='" + player.username + "'")
-	defer rows.Close()
+	player.write(msgType, fmt.Sprintf("%v@#@%s@#@%v@#@%s@#@%v", player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score))
+	var id, points, games, contributions int
+	err := database.QueryRow("SELECT * FROM users WHERE username=?", username).Scan(&id, &username, &password, &points, &games, &contributions)
 	if err != nil {
 		fmt.Println(err)
 		return
-	}
-	var id, points, games, contributions int
-	for rows.Next() {
-		rows.Scan(&id, &username, &password, &points, &games, &contributions)
 	}
 	fmt.Println(fmt.Sprintf("%s B== %v == %v", player.username, games, points))
 	games += 1

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"regexp"
 )
@@ -38,8 +39,8 @@ func signup(w http.ResponseWriter, r *http.Request) {
 		w.Write(js)
 		return
 	}
-	res, err := database.Exec("INSERT INTO users (username, password) VALUES (\"" + username + "\", \"" + password + "\")")
-	fmt.Println(res)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	_, err = database.Exec("INSERT INTO users (username, password) VALUES (?, ?)", username, hashedPassword)
 	if err == nil {
 		data := struct {
 			Status  bool
@@ -48,6 +49,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 		js, _ := json.Marshal(data)
 		w.Write(js)
 	} else {
+		fmt.Println(err)
 		data := struct {
 			Status  bool
 			Message string

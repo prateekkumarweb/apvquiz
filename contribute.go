@@ -18,19 +18,7 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 	answer := r.FormValue("correct")
 	topic := strings.ToLower(strings.Replace(r.FormValue("subject"), " ", "", -1))
 	w.Header().Set("Content-Type", "application/json")
-	rows, err := database.Query(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %s)", topic, question, option1, option2, option3, option4, answer))
-	defer rows.Close()
-	if err != nil {
-		data := struct {
-			Status  bool
-			Message string
-		}{false, "Error!"}
-		js, _ := json.Marshal(data)
-		w.Write(js)
-		return
-	}
-	rows1, err := database.Query("SELECT * FROM users WHERE username='" + username + "' AND password='" + password + "'")
-	defer rows1.Close()
+	_, err := database.Exec(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %s)", topic, question, option1, option2, option3, option4, answer))
 	if err != nil {
 		data := struct {
 			Status  bool
@@ -41,12 +29,18 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id, points, games, contributions int
-	for rows1.Next() {
-		rows1.Scan(&id, &username, &password, &points, &games, &contributions)
+	err = database.QueryRow("SELECT * FROM users WHERE username=? AND password=?", username, password).Scan(&id, &username, &password, &points, &games, &contributions)
+	if err != nil {
+		data := struct {
+			Status  bool
+			Message string
+		}{false, "Error!"}
+		js, _ := json.Marshal(data)
+		w.Write(js)
+		return
 	}
 	contributions += 1
-	rows2, err := database.Query(fmt.Sprintf("UPDATE users SET contributions=%v WHERE username=\"%s\"", contributions, username))
-	defer rows2.Close()
+	_, err = database.Exec("UPDATE users SET contributions=? WHERE username=?", contributions, username)
 	if err != nil {
 		data := struct {
 			Status  bool
