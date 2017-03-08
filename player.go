@@ -14,16 +14,19 @@ import (
 	"time"
 )
 
+// Player struct to store player object
 type Player struct {
-	sync.Mutex
+	sync.Mutex  // Lock while writing to conn
 	conn        *websocket.Conn
 	username    string
 	password    string
-	ch          chan string
-	otherPlayer []*Player
-	score       int
+	ch          chan string // channel through different client communicate
+	otherPlayer []*Player   // slice of other players
+	score       int         // score of the current player
 }
 
+// Players type to store slice of players (like a alias)
+// Functions Len, Less and Swap are defined so that players can be sorted based on usernames
 type Players []*Player
 
 func (ps Players) Len() int {
@@ -43,23 +46,28 @@ func (ps Players) Swap(i, j int) {
 	ps[i], ps[j] = ps[j], ps[i]
 }
 
+// waiting struct to store players waiting for the other players to join
 var waiting struct {
 	sync.Mutex
-	players map[string]Players
+	players map[string]Players // map from topic to waiting players
 }
 
+// validatePlayer function validates player from the database
 func validatePlayer(player Player) bool {
 	username := player.username
 	password := player.password
 	return validateUser(username, password)
 }
 
+// validateUser function validates username and password
 func validateUser(username, password string) bool {
+	// Get hashed password from database
 	var dbPassword string
 	err := database.QueryRow("SELECT password FROM users WHERE username=?", username).Scan(&dbPassword)
 	if err != nil {
 		return false
 	}
+	// compare given password with its hash and validate
 	err = bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(password))
 	if err != nil {
 		return false
@@ -68,8 +76,12 @@ func validateUser(username, password string) bool {
 }
 
 func playerDetails(w http.ResponseWriter, r *http.Request) {
+
+	// Get username and password from the request object
 	username := r.FormValue("username")
 	password := r.FormValue("password")
+
+	// Set content type of response
 	w.Header().Set("Content-Type", "application/json")
 	var id, points, games, contributions int
 	// TODO use password here
@@ -95,12 +107,17 @@ func playerDetails(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-func (player *Player) write(msgType int, s string) {
+// write function obtains a lock on the player and sends the message the client
+// Lock is obtained to avoid concurrnt writes
+func (player *Player) write(msgType int, message string) {
 	player.Lock()
-	player.conn.WriteMessage(msgType, []byte(s))
+	player.conn.WriteMessage(msgType, []byte(message))
 	player.Unlock()
 }
 
+// handleClient function is the go routine that runs while user is playing game
+// One instance of this function per connection runs and communicate with
+// each other while game is running
 func handleClient(c *websocket.Conn) {
 
 	msgs := make(chan string)
