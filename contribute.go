@@ -32,7 +32,7 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 
 	var id, points, games, contributions int
 	var dbPassword string
-	err = database.QueryRow("SELECT * FROM users WHERE username=?", username).Scan(&id, &username, &dbPassword, &points, &games, &contributions)
+	err := database.QueryRow("SELECT * FROM users WHERE username=?", username).Scan(&id, &username, &dbPassword, &points, &games, &contributions)
 	if err != nil {
 		// TODO Log error
 		data := struct {
@@ -58,7 +58,7 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save question sent by the user into the database
-	_, err := database.Exec(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %s)", topic, question, option1, option2, option3, option4, answer))
+	_, err = database.Exec(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %s)", topic, question, option1, option2, option3, option4, answer))
 	if err != nil {
 		data := struct {
 			Status  bool

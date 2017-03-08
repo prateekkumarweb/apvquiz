@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"regexp"

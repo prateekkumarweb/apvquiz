@@ -120,8 +120,10 @@ func (player *Player) write(msgType int, message string) {
 // each other while game is running
 func handleClient(c *websocket.Conn) {
 
+	// msgs channel where messages from the user will be added
 	msgs := make(chan string)
 
+	// Ask user for username and password and validate them and create a player object
 	msgType, username, _ := c.ReadMessage()
 	msgType, password, _ := c.ReadMessage()
 	player := Player{sync.Mutex{}, c, string(username), string(password), make(chan string), nil, 0}
@@ -129,18 +131,31 @@ func handleClient(c *websocket.Conn) {
 		player.write(msgType, "Invalid\n")
 		return
 	}
+
+	// List of questions
 	var questions [5]string
+
+	// Read topic from the user
 	msgType, t, _ := c.ReadMessage()
 	topic := string(t)
 
+	// This goroutine reads messages sent by the user and adds them to msgs channel
+	// from where the parent function will read the input
 	go func() {
 		for {
+			// Wait until a message arrives
 			_, msg, err := c.ReadMessage()
+
+			// If one of the client has disconnected
 			if err != nil || string(msg) == "closed" {
+
+				// Send to other players that this player has diconnected and close their connections
 				for _, p := range player.otherPlayer {
 					p.write(msgType, "Opponent has left the game")
 					p.conn.Close()
 				}
+
+				// If this player was there in the waiting list then remove him
 				waiting.Lock()
 				for i, p := range waiting.players[topic] {
 					if p == &player {
@@ -149,36 +164,51 @@ func handleClient(c *websocket.Conn) {
 					}
 				}
 				waiting.Unlock()
+
+				// Close the players connection
 				player.conn.Close()
 				return
 			}
+
+			// otherwise add the message to the channel
 			msgs <- string(msg)
 		}
 	}()
 
 	waiting.Lock()
+	// If number of players waiting is less than two then add this player to waiting list
 	if len(waiting.players[topic]) < 2 {
 		if waiting.players[topic] == nil {
 			waiting.players[topic] = make([]*Player, 0)
 		}
 		waiting.players[topic] = append(waiting.players[topic], &player)
 		waiting.Unlock()
+		// wait until another player send a success message
 		<-player.ch
+		// Get the questions from another player
 		for i, _ := range questions {
 			questions[i] = <-player.ch
 		}
 	} else {
+		// If number of players are 3 then remove them from waiting queue and add
+		// them to otherPlayers list
 		player.otherPlayer = waiting.players[topic]
 		waiting.players[topic] = nil
 		waiting.Unlock()
 		player.otherPlayer[0].otherPlayer = []*Player{player.otherPlayer[1], &player}
 		player.otherPlayer[1].otherPlayer = []*Player{player.otherPlayer[0], &player}
+
+		// Send a success message to other players
 		player.otherPlayer[0].ch <- "Play\n"
 		player.otherPlayer[1].ch <- "Play\n"
+
+		// Select random questions in the given tpic
 		r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 		var count int
 		database.QueryRow("SELECT COUNT(*) FROM " + topic).Scan(&count)
 		perm := r.Perm(count)
+
+		// Select the questions and send them to other players
 		for i, _ := range questions {
 			func() {
 				var id, answer int
@@ -191,16 +221,18 @@ func handleClient(c *websocket.Conn) {
 		}
 	}
 
+	// Iterate over all the questions
 	for i, _ := range questions {
+
+		// Send the question to the player along with scores of other players
 		player.write(msgType, fmt.Sprintf("%s@#@%v@#@%s@#@%v@#@%s@#@%v", questions[i], player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score))
 
+		// Receive the answer and time from client
 		answerStr := <-msgs
 		timeStr := <-msgs
 
-		if answerStr == "closed" || timeStr == "closed" {
-			fmt.Println("closed.......//")
-		}
-
+		// The client sends one if the user has answered correctly
+		// If client has answered correctly, give scores accordinly
 		if answerStr == "1" && i != 4 {
 			score, _ := strconv.Atoi(timeStr)
 			player.score += score
@@ -208,7 +240,12 @@ func handleClient(c *websocket.Conn) {
 			score, _ := strconv.Atoi(timeStr)
 			player.score += score * 2
 		}
+
+		// Wait for 2 seconds so that user can see the results
 		time.Sleep(2 * time.Second)
+
+		// Sync with other players until they have answrred correctly or timer is up
+		// Player channels work as barrier here as they are waiting for other players to complete
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
 		for i, p := range players {
@@ -225,17 +262,18 @@ func handleClient(c *websocket.Conn) {
 		}
 	}
 
+	// At the end of the game send the score
 	player.write(msgType, fmt.Sprintf("%v@#@%s@#@%v@#@%s@#@%v", player.score, player.otherPlayer[0].username, player.otherPlayer[0].score, player.otherPlayer[1].username, player.otherPlayer[1].score))
+
+	// Save new points of the player, their number of games in the database
 	var id, points, games, contributions int
 	err := database.QueryRow("SELECT * FROM users WHERE username=?", username).Scan(&id, &username, &password, &points, &games, &contributions)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(fmt.Sprintf("%s B== %v == %v", player.username, games, points))
 	games += 1
 	points += player.score
-	fmt.Println(fmt.Sprintf("%s A== %v == %v", player.username, games, points))
 	_, err = database.Query(fmt.Sprintf("UPDATE users SET games=%v, points=%v WHERE username=\"%s\"", games, points, username))
 	if err != nil {
 		fmt.Println(err)
