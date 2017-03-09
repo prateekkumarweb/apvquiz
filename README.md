@@ -1,19 +1,12 @@
 # apvquiz
 
-### Data : users
+### A Multiplayer Multithreaded Quizzing Application
+### Anurag Singh Kushwah CS15BTECH11003
+### Prateek Kumar CS15BTECH11031
+### Vaibhav B Sinha CS15BTECH11034
 
-+ id
-+ username
-+ password
+This repository is to be used in conjunction with apvquiz-client.
 
-### Topic
+This repository consists of the server side of the application written in go.
 
-* harrypotter
-* gk
-* movies
-* anime
-* computers
-* science
-* cricket
-* got
-* trivia
+The application heavily relies upon multithreading.
