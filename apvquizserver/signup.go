@@ -23,7 +23,8 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Validate the username sent
-	if regexp.MustCompile(`[\dA-Za-z]+`).MatchString(username) {
+	matched, _ := regexp.MatchString(`^[\dA-Za-z]+$`, username)
+	if !matched {
 		data := struct {
 			Status  bool
 			Message string
