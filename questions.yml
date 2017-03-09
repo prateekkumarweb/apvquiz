@@ -48,13 +48,6 @@ questions:
     option4: "1902"
     answer: 1
     subject: "sports"
-  - question: "In badminton, how many points win a single game?"
-    option1: "10"
-    option2: "19" 
-    option3: "20"
-    option4: "15"
-    answer: 4
-    subject: "sports"
   - question: "As of 2015,how many countries have won the FIFA World Cup?"
     option1: "7"
     option2: "9" 
@@ -670,7 +663,6 @@ questions:
     option3: "Task scheduling"
     option4: "Object oriented programming"
     answer: 4
-    contributor: "prateek"
     subject: "computers"
   - question: "Which of these words is common synonym for restarting a device?"
     option1: "Reboot"

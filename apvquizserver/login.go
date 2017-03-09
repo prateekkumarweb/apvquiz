@@ -8,10 +8,10 @@ import (
 // login handler validates usernane and password
 // and replies whether the user is authenticated
 // Reply is in json form
-// {
-//   "Auth" : true // true if authenticated else false
-// }
-func login(w http.ResponseWriter, r *http.Request) {
+//   {
+//     "Auth" : true // true if authenticated else false
+//   }
+func Login(w http.ResponseWriter, r *http.Request) {
 
 	// Get username and password from the request object
 	username := r.FormValue("username")
@@ -23,7 +23,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 	// Verify if username and password not empty
 	if username != "" && password != "" {
 		// Validate the username and password
-		if validateUser(username, password) {
+		if ValidateUser(username, password) {
 			//  Case authenticated
 			data := struct {
 				Auth bool

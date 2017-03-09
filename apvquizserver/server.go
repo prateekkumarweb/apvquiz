@@ -30,7 +30,7 @@ type Question struct {
 	Contributor string
 }
 
-// Questions strcu is used to read questions from yml file to put in database
+// Questions struct is used to read questions from yml file to put in database
 type Questions struct {
 	Questions []Question
 }
@@ -136,19 +136,19 @@ func Run() {
 
 	// Login handler
 	// Receives username and password from a post request and verifies the credentials
-	http.HandleFunc("/login", login)
+	http.HandleFunc("/login", Login)
 
 	// Signup handler
 	// Receives username and password from a post request and creates a new user and adds to the database
-	http.HandleFunc("/signup", signup)
+	http.HandleFunc("/signup", Signup)
 
 	// PlayerDetails handler
 	// Receives username and password from a post request and send back the details of the player
-	http.HandleFunc("/details", playerDetails)
+	http.HandleFunc("/details", PlayerDetails)
 
 	// Contribution handler
 	// Receives question from user and adds them to the database
-	http.HandleFunc("/contri", contribute)
+	http.HandleFunc("/contri", Contribute)
 
 	// Play Game handler
 	// Creates a go routine that handles the game play of that client
@@ -163,7 +163,7 @@ func Run() {
 			return
 		}
 		// Handle the client by creating a goroutine
-		go handleClient(conn)
+		go HandleClient(conn)
 	})
 
 	// Host the server on port given as command line flag

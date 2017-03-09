@@ -53,14 +53,14 @@ var waiting struct {
 }
 
 // validatePlayer function validates player from the database
-func validatePlayer(player Player) bool {
+func ValidatePlayer(player Player) bool {
 	username := player.username
 	password := player.password
-	return validateUser(username, password)
+	return ValidateUser(username, password)
 }
 
 // validateUser function validates username and password
-func validateUser(username, password string) bool {
+func ValidateUser(username, password string) bool {
 	// Get hashed password from database
 	var dbPassword string
 	err := database.QueryRow("SELECT password FROM users WHERE username=?", username).Scan(&dbPassword)
@@ -76,7 +76,7 @@ func validateUser(username, password string) bool {
 }
 
 // playerDeatils handler sends points, games and contributions of the player
-func playerDetails(w http.ResponseWriter, r *http.Request) {
+func PlayerDetails(w http.ResponseWriter, r *http.Request) {
 
 	// Get username and password from the request object
 	username := r.FormValue("username")
@@ -118,7 +118,7 @@ func (player *Player) write(msgType int, message string) {
 // handleClient function is the go routine that runs while user is playing game
 // One instance of this function per connection runs and communicate with
 // each other while game is running
-func handleClient(c *websocket.Conn) {
+func HandleClient(c *websocket.Conn) {
 
 	// msgs channel where messages from the user will be added
 	msgs := make(chan string)
@@ -127,7 +127,7 @@ func handleClient(c *websocket.Conn) {
 	msgType, username, _ := c.ReadMessage()
 	msgType, password, _ := c.ReadMessage()
 	player := Player{sync.Mutex{}, c, string(username), string(password), make(chan string), nil, 0}
-	if !validatePlayer(player) {
+	if !ValidatePlayer(player) {
 		player.write(msgType, "Invalid\n")
 		return
 	}

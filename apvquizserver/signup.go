@@ -9,11 +9,11 @@ import (
 
 // signup function ceates new user and saves in the database
 // Reply is in the json from
-// {
-//   "Status": true, // Is signup Successful
-//   "Message": "" // Reason if signup is unsuccessful
-// }
-func signup(w http.ResponseWriter, r *http.Request) {
+//   {
+//     "Status": true, // Is signup Successful
+//     "Message": "" // Reason if signup is unsuccessful
+//   }
+func Signup(w http.ResponseWriter, r *http.Request) {
 
 	// Get username and password from the request object
 	username := r.FormValue("username")
@@ -23,7 +23,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Validate the username sent
-	if !regexp.MustCompile(`[\dA-Za-z]`).MatchString(username) {
+	if regexp.MustCompile(`[\dA-Za-z]+`).MatchString(username) {
 		data := struct {
 			Status  bool
 			Message string

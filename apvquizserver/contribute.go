@@ -13,11 +13,11 @@ import (
 
 // contribute function saves the questions sent by players in the database
 // Reply is in the json form
-// {
-//   "Status": true, // Is contribution Successful
-//   "Message": "" // Reason if contribution is unsuccessful
-// }
-func contribute(w http.ResponseWriter, r *http.Request) {
+//   {
+//     "Status": true, // Is contribution Successful
+//     "Message": "" // Reason if contribution is unsuccessful
+//   }
+func Contribute(w http.ResponseWriter, r *http.Request) {
 	// Read from post data sent by the user
 	username := r.FormValue("username")
 	password := r.FormValue("password")
@@ -73,6 +73,8 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
+// save Contribution adds contributions to contributions.yml file
+// so that it can be used to add to databse using init flag
 func saveContribution(q Question) {
 	data, _ := ioutil.ReadFile("contributions.yml")
 	questions := Questions{}
