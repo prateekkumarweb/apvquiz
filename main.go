@@ -1,8 +1,7 @@
 package main
 
-import "github.com/prateekkumarweb/apvquiz"
+import "github.com/prateekkumarweb/apvquiz/apvquizserver"
 
 func main() {
 	apvquiz.Run()
 }
-

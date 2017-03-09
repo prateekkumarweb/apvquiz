@@ -1,4 +1,4 @@
-package apvquiz
+package apvquizserver
 
 import (
 	"database/sql"
