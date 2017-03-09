@@ -202,7 +202,7 @@ func handleClient(c *websocket.Conn) {
 		player.otherPlayer[0].ch <- "Play\n"
 		player.otherPlayer[1].ch <- "Play\n"
 
-		// Select random questions in the given tpic
+		// Select random questions in the given topic
 		r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 		var count int
 		database.QueryRow("SELECT COUNT(*) FROM " + topic).Scan(&count)
@@ -232,7 +232,7 @@ func handleClient(c *websocket.Conn) {
 		timeStr := <-msgs
 
 		// The client sends one if the user has answered correctly
-		// If client has answered correctly, give scores accordinly
+		// If client has answered correctly, give scores accordingly
 		if answerStr == "1" && i != 4 {
 			score, _ := strconv.Atoi(timeStr)
 			player.score += score
@@ -244,7 +244,14 @@ func handleClient(c *websocket.Conn) {
 		// Wait for 2 seconds so that user can see the results
 		time.Sleep(2 * time.Second)
 
-		// Sync with other players until they have answrred correctly or timer is up
+		// Sync with other players until they have answered correctly or timer is up
+		//For syncing with other players a barrier is implemented
+		//Barrier works as ---
+		//An array of players is created by sorting the names of the three players
+		//Say the players go as player[0] A, player[1] B, player[2] C
+		//   Player[0]		|    Player[1]		|    Player[2]
+		//   wait(player[1])	|    wait(player[2])	|    signal(player[0])
+		//   signal(player[1])	|    signal(player[2])  |    wait(player[1])
 		// Player channels work as barrier here as they are waiting for other players to complete
 		players := Players{&player, player.otherPlayer[0], player.otherPlayer[1]}
 		sort.Sort(players)
