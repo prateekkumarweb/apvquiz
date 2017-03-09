@@ -3,5 +3,6 @@ package main
 import "github.com/prateekkumarweb/apvquiz/apvquizserver"
 
 func main() {
-	apvquiz.Run()
+	// Run the game server
+	apvquizserver.Run()
 }

@@ -18,6 +18,7 @@ var database *sql.DB
 
 var err error
 
+// Question struct stores the question, options, correct answer, subject and contributor
 type Question struct {
 	Question    string
 	Option1     string
@@ -29,13 +30,16 @@ type Question struct {
 	Contributor string
 }
 
+// Questions strcu is used to read questions from yml file to put in database
 type Questions struct {
 	Questions []Question
 }
 
-// main function that runs the server on port 8000
+// Run function runs the server on port specified by flag input
+// or uses 8000 as default
 func Run() {
-	// Command line flags
+
+	// Read command line flags and parse them
 	port := flag.String("http", ":8000", "Port on which the server is to be hosted")
 	mysql := flag.String("mysql", "root:123", "Username and password used to connect to the database")
 	db := flag.String("db", "apvquiz", "MySql database")
@@ -48,18 +52,17 @@ func Run() {
 	// Open a connection to mysql database
 	database, err = sql.Open("mysql", *mysql+"@/"+*db)
 	if err != nil {
-		// TODO handle error
-		panic(err.Error())
+		fmt.Println(err)
 		return
 	}
 	err = database.Ping()
 	if err != nil {
-		// TODO handle error
-		panic(err.Error())
+		fmt.Println(err)
 		return
 	}
-	defer database.Close()
+	defer database.Close() // Close the database at the end
 
+	// Create users table if does not exists in the database
 	database.Exec(`CREATE TABLE IF NOT EXISTS users (
 		id int auto_increment,
 		username varchar(180) not null unique,
@@ -70,22 +73,27 @@ func Run() {
 		primary key (id)
 	)`)
 
+	// Create topic wise tables for storing questions
 	topics := []string{"harrypotter", "gk", "movies", "anime", "science", "sports", "got", "trivia", "computers"}
 	for _, t := range topics {
 		go func(topic string) {
 			database.Exec("CREATE TABLE IF NOT EXISTS " + topic + " (id int auto_increment, question text not null, option1 varchar(180) not null, option2 varchar(180) not null, option3 varchar(180) not null, option4 varchar(180) not null, answer int not null, primary key (id))")
 		}(t)
 	}
+
+	// If -init flaf is specified, add questions to the database from the given file
 	if *init != "" {
+
+		// Read questions from given yaml file
 		data, _ := ioutil.ReadFile(*init)
-
 		questions := Questions{}
-
 		err = yaml.Unmarshal(data, &questions)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+
+		// Create go routines that will add questions to database and join them at end
 		var wg sync.WaitGroup
 		for _, q := range questions.Questions {
 			wg.Add(1)

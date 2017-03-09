@@ -75,6 +75,7 @@ func validateUser(username, password string) bool {
 	return true
 }
 
+// playerDeatils handler sends points, games and contributions of the player
 func playerDetails(w http.ResponseWriter, r *http.Request) {
 
 	// Get username and password from the request object
@@ -84,7 +85,6 @@ func playerDetails(w http.ResponseWriter, r *http.Request) {
 	// Set content type of response
 	w.Header().Set("Content-Type", "application/json")
 	var id, points, games, contributions int
-	// TODO use password here
 	err := database.QueryRow("SELECT * FROM users where username=?", username).Scan(&id, &username, &password, &points, &games, &contributions)
 	if err != nil {
 		data := struct {
