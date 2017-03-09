@@ -1,4 +1,4 @@
-package main
+package apvquiz
 
 import (
 	"database/sql"
@@ -34,7 +34,7 @@ type Questions struct {
 }
 
 // main function that runs the server on port 8000
-func main() {
+func Run() {
 	// Command line flags
 	port := flag.String("http", ":8000", "Port on which the server is to be hosted")
 	mysql := flag.String("mysql", "root:123", "Username and password used to connect to the database")

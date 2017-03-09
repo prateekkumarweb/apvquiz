@@ -1,4 +1,4 @@
-package main
+package apvquiz
 
 import (
 	"encoding/json"
