@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +18,6 @@ import (
 //   "Message": "" // Reason if contribution is unsuccessful
 // }
 func contribute(w http.ResponseWriter, r *http.Request) {
-
 	// Read from post data sent by the user
 	username := r.FormValue("username")
 	password := r.FormValue("password")
@@ -57,32 +59,10 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save question sent by the user into the database
-	_, err = database.Exec(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %s)", topic, question, option1, option2, option3, option4, answer))
-	if err != nil {
-		data := struct {
-			Status  bool
-			Message string
-		}{false, "Error!"}
-		js, _ := json.Marshal(data)
-		w.Write(js)
-		return
-	}
+	answerInt, _ := strconv.Atoi(answer)
 
-	// Add 1 to contribution by the user and save in the database
-	contributions += 1
-	_, err = database.Exec("UPDATE users SET contributions=? WHERE username=?", contributions, username)
-	if err != nil {
-		// If not saved
-		// TODO Log error
-		data := struct {
-			Status  bool
-			Message string
-		}{false, "Error!"}
-		js, _ := json.Marshal(data)
-		w.Write(js)
-		return
-	}
+	questionObj := Question{question, option1, option2, option3, option4, answerInt, topic, username}
+	saveContribution(questionObj)
 
 	// Now the data has been saved, so send the Status
 	data := struct {
@@ -91,4 +71,22 @@ func contribute(w http.ResponseWriter, r *http.Request) {
 	}{true, "Thanks for contributing"}
 	js, _ := json.Marshal(data)
 	w.Write(js)
+}
+
+func saveContribution(q Question) {
+	data, _ := ioutil.ReadFile("contributions.yml")
+	questions := Questions{}
+	err = yaml.Unmarshal(data, &questions)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	questions.Questions = append(questions.Questions, q)
+
+	data, _ = yaml.Marshal(&questions)
+	err = ioutil.WriteFile("contributions.yml", data, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"sync"
 )
 
 // Database for handling connections to MySQL database
@@ -18,13 +19,14 @@ var database *sql.DB
 var err error
 
 type Question struct {
-	Question string
-	Option1  string
-	Option2  string
-	Option3  string
-	Option4  string
-	Answer   int
-	Subject  string
+	Question    string
+	Option1     string
+	Option2     string
+	Option3     string
+	Option4     string
+	Answer      int
+	Subject     string
+	Contributor string
 }
 
 type Questions struct {
@@ -37,7 +39,7 @@ func main() {
 	port := flag.String("http", ":8000", "Port on which the server is to be hosted")
 	mysql := flag.String("mysql", "root:123", "Username and password used to connect to the database")
 	db := flag.String("db", "apvquiz", "MySql database")
-	init := flag.Bool("init", false, "Set true if questions are to be initialized from question.yml file")
+	init := flag.String("init", "", "Add questions to database from given file")
 	flag.Parse()
 
 	// Initialize waiting struct which maintains the players waiting for other players to join
@@ -74,42 +76,43 @@ func main() {
 			database.Exec("CREATE TABLE IF NOT EXISTS " + topic + " (id int auto_increment, question text not null, option1 varchar(180) not null, option2 varchar(180) not null, option3 varchar(180) not null, option4 varchar(180) not null, answer int not null, primary key (id))")
 		}(t)
 	}
-	if *init {
-		data, _ := ioutil.ReadFile("questions.yml")
+	if *init != "" {
+		data, _ := ioutil.ReadFile(*init)
 
 		questions := Questions{}
 
 		err = yaml.Unmarshal(data, &questions)
 		if err != nil {
-			fmt.Println("err")
 			fmt.Println(err)
 			return
 		}
+		var wg sync.WaitGroup
 		for _, q := range questions.Questions {
+			wg.Add(1)
 			go func(question Question) {
+				defer wg.Done()
 				database.Exec("INSERT INTO "+question.Subject+" VALUES(0, ?, ?, ?, ?, ?, ?)", question.Question, question.Option1, question.Option2, question.Option3, question.Option4, question.Answer)
+				if question.Contributor != "" {
+					var id, points, games, contributions int
+					var username, password string
+					err := database.QueryRow("SELECT * FROM users WHERE username=?", question.Contributor).Scan(&id, &username, &password, &points, &games, &contributions)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					contributions += 1
+					_, err = database.Exec("UPDATE users SET contributions=? WHERE username=?", contributions, username)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+				}
+
 			}(q)
 		}
+		wg.Wait()
+		return
 	}
-
-	//
-	// r := rand.New(rand.NewSource(99))
-	// topics := []string{"harrypotter", "gk", "movies", "anime", "science", "sports", "got", "trivia", "computers"}
-	// for _, t := range topics {
-	// 	go func(topic string) {
-	// 		var count int
-	// 		database.Exec("CREATE TABLE IF NOT EXISTS " + topic + " (id int auto_increment, question text not null, option1 varchar(180) not null, option2 varchar(180) not null, option3 varchar(180) not null, option4 varchar(180) not null, answer int not null, primary key (id))")
-	// 		database.QueryRow("SELECT COUNT(*) FROM " + topic).Scan(&count)
-	// 		if count < 25 {
-	// 			for i := 0; i < 25; i++ {
-	// 				_, err := database.Exec(fmt.Sprintf("INSERT INTO %s VALUES (0, '%s', '%s', '%s', '%s', '%s', %v)", topic, "question"+fmt.Sprintf("%v", i), "option"+fmt.Sprintf("%v", i)+"-1", "option"+fmt.Sprintf("%v", i)+"-2", "option"+fmt.Sprintf("%v", i)+"-3", "option"+fmt.Sprintf("%v", i)+"-4", r.Intn(4)+1))
-	// 				if err != nil {
-	// 					fmt.Println(err)
-	// 				}
-	// 			}
-	// 		}
-	// 	}(t)
-	// }
 
 	// updrader object containing configurations for upgrading a http connection to ws connection
 	upgrader := websocket.Upgrader{

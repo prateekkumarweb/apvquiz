@@ -148,7 +148,7 @@ func handleClient(c *websocket.Conn) {
 
 			// If one of the client has disconnected
 			if err != nil || string(msg) == "closed" {
-
+				player.score = 0
 				// Send to other players that this player has diconnected and close their connections
 				for _, p := range player.otherPlayer {
 					p.write(msgType, "Opponent has left the game")

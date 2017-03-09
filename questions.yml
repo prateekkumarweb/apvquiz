@@ -643,7 +643,7 @@ questions:
     option4: "carrot"
     answer: 3
     subject: "science"
-  - question: "In c++ what does '\0' mean?"
+  - question: "In c++ what does '\\0' mean?"
     option1: "NULL"
     option2: "backslash"
     option3: "newline"
@@ -670,6 +670,7 @@ questions:
     option3: "task scheduling"
     option4: "object oriented programming"
     answer: 4
+    contributor: "prateek"
     subject: "computers"
   - question: "which of these words is common synonym for restarting a device?"
     option1: "reboot"

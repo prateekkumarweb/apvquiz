@@ -12,7 +12,7 @@
 * gk
 * movies
 * anime
-* computerscience
+* computers
 * science
 * cricket
 * got
