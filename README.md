@@ -5,7 +5,7 @@
 ### Prateek Kumar CS15BTECH11031
 ### Vaibhav B Sinha CS15BTECH11034
 
-This repository is to be used in conjunction with apvquiz-client.
+This repository is to be used in conjunction with [apvquiz-client](https://github.com/prateekkumarweb/apvquiz-client).
 
 This repository consists of the server side of the application written in go.
 
